@@ -1,0 +1,65 @@
+<Page x:Class="Cleaner.App.Pages.SchedulePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Расписание">
+    <StackPanel Margin="28,8,28,24" MaxWidth="820" HorizontalAlignment="Left">
+        <ui:TextBlock Text="Расписание" FontTypography="TitleLarge" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+        <TextBlock Text="Автоочистка через планировщик Windows. Корзину и системные пункты она не трогает никогда, открытые приложения пропускает, всё уходит в карантин на 7 дней."
+                   TextWrapping="Wrap" Margin="0,4,0,18" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+        <ui:CardControl Icon="{ui:SymbolIcon CalendarClock24}" Margin="0,0,0,8">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <TextBlock Text="Автоочистка" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="NextRunText" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <ui:ToggleSwitch x:Name="EnabledToggle" Click="Enabled_Click" />
+        </ui:CardControl>
+
+        <ui:CardControl Header="Как часто" Icon="{ui:SymbolIcon ArrowRepeatAll24}" Margin="0,0,0,8">
+            <ComboBox x:Name="FrequencyBox" Width="330" SelectionChanged="Frequency_Changed">
+                <ComboBoxItem Content="Раз в неделю — воскресенье, 12:00" />
+                <ComboBoxItem Content="Каждый день в 12:00" />
+                <ComboBoxItem Content="Когда мусора больше 1 ГБ (проверка в 12:00)" />
+            </ComboBox>
+        </ui:CardControl>
+
+        <ui:CardExpander Header="Что чистить автоматически" Icon="{ui:SymbolIcon TaskListSquareLtr24}" Margin="0,0,0,8">
+            <ItemsControl x:Name="RulesList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked}" Margin="0,2" Click="Rule_Click" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ui:CardExpander>
+
+        <ui:CardControl Icon="{ui:SymbolIcon History24}" Margin="0,0,0,8">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <TextBlock Text="Последний запуск" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="LastRunText" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <ui:Button x:Name="RunNowButton" Content="Запустить сейчас" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Play24}" Click="RunNow_Click" />
+        </ui:CardControl>
+
+        <ui:CardControl Icon="{ui:SymbolIcon Desktop24}" Margin="0,0,0,8">
+            <ui:CardControl.Header>
+                <StackPanel>
+                    <TextBlock Text="Ярлык «Быстрая очистка» на рабочем столе" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock Text="Двойной клик — тихая очистка по этим настройкам и уведомление с результатом, без открытия окна"
+                               FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </ui:CardControl.Header>
+            <ui:Button x:Name="ShortcutButton" Content="Создать ярлык" Icon="{ui:SymbolIcon Add24}" Click="Shortcut_Click" />
+        </ui:CardControl>
+
+        <TextBlock x:Name="StatusText" Margin="4,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+    </StackPanel>
+</Page>

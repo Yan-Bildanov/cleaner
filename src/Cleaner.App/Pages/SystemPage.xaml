@@ -1,0 +1,119 @@
+<Page x:Class="Cleaner.App.Pages.SystemPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:health="clr-namespace:Cleaner.Core.Health;assembly=Cleaner.Core"
+      Title="Система">
+    <Page.Resources>
+        <!-- Цветная точка и подпись статуса -->
+        <Style x:Key="StatusDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Fill" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Ok}">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Warning}">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Problem}">
+                    <Setter Property="Fill" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="StatusLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Ok}">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Warning}">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="{x:Static health:HealthStatus.Problem}">
+                    <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Page.Resources>
+
+    <StackPanel Margin="28,8,28,24">
+            <Grid Margin="0,0,0,18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <ui:TextBlock Text="Система" FontTypography="TitleLarge" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="SummaryText" Text="Проверяю…" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <ui:Button x:Name="AdminButton" Content="Права администратора" Icon="{ui:SymbolIcon Shield24}"
+                               Margin="0,0,8,0" Click="Admin_Click"
+                               ToolTip="Покажет температуру процессора и износ SSD" />
+                    <ui:Button x:Name="RefreshButton" Content="Проверить ещё раз" Appearance="Primary"
+                               Icon="{ui:SymbolIcon ArrowClockwise24}" Click="Refresh_Click" />
+                </StackPanel>
+            </Grid>
+
+            <ui:ProgressRing x:Name="Busy" IsIndeterminate="True" Margin="0,40" HorizontalAlignment="Center" />
+
+            <ItemsControl x:Name="ChecksList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <ui:CardExpander Margin="0,0,0,8" IsExpanded="False" Padding="16,12">
+                            <ui:CardExpander.Icon>
+                                <ui:SymbolIcon Symbol="{Binding Icon}" />
+                            </ui:CardExpander.Icon>
+                            <ui:CardExpander.Header>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Top"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                    <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                                        <TextBlock Text="{Binding Value}" FontSize="14" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                        <TextBlock Text="{Binding Hint}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,3,8,0">
+                                        <Ellipse Style="{StaticResource StatusDot}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource StatusLabel}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
+                            </ui:CardExpander.Header>
+                            <TextBlock Text="{Binding DetailsText}" FontSize="13" TextWrapping="Wrap" Margin="150,0,0,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" LineHeight="20" />
+                        </ui:CardExpander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ui:TextBlock x:Name="HardwareTitle" Text="Железо" FontTypography="Subtitle" Margin="0,20,0,8"
+                          Foreground="{DynamicResource TextFillColorPrimaryBrush}" Visibility="Collapsed" />
+            <ui:Card x:Name="HardwareCard" Padding="20,14" Visibility="Collapsed">
+                <ItemsControl x:Name="HardwareList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ui:Card>
+    </StackPanel>
+</Page>
