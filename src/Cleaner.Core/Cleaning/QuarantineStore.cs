@@ -58,13 +58,16 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
     /// системной папки — без администратора их потом не удалить ни кнопкой, ни автоочисткой через 7 дней.
     /// Сбрасываем права на всём карантине до унаследованных от папки профиля. Вызывается из повышенного помощника.
     /// </summary>
-    public void ResetPermissions()
+    public void ResetPermissions() => ResetPermissions(Root);
+
+    /// <summary>icacls /reset /T: права папки и всего внутри — только унаследованные от родителя (папки профиля).</summary>
+    public static void ResetPermissions(string path)
     {
-        if (!Directory.Exists(Root)) return;
+        if (!Directory.Exists(path)) return;
         try
         {
             using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                Path.Combine(Environment.SystemDirectory, "icacls.exe"), $"\"{Root}\" /reset /T /C /Q")
+                Path.Combine(Environment.SystemDirectory, "icacls.exe"), $"\"{path.TrimEnd('\\')}\" /reset /T /C /Q")
             {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             })!;

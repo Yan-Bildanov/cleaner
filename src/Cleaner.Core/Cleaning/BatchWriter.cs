@@ -126,5 +126,22 @@ public sealed class BatchWriter : IDisposable
         _manifest.Dispose();
         // Если ничего не перенесли — пустая партия не нужна.
         if (MovedCount == 0) try { Directory.Delete(Dir, recursive: true); } catch { }
+        // Перенесённое процессом с правами администратора (из Program Files, C:\Windows\Temp) сохраняет права доступа
+        // системной папки — потом его не удалить ни кнопкой без прав администратора, ни автоочисткой через 7 дней.
+        // Сбрасываем права партии до унаследованных от папки профиля — в любом повышенном процессе, каким бы путём он ни шёл.
+        else if (IsElevated) QuarantineStore.ResetPermissions(Dir);
+    }
+
+    static bool IsElevated
+    {
+        get
+        {
+            try
+            {
+                using var id = System.Security.Principal.WindowsIdentity.GetCurrent();
+                return new System.Security.Principal.WindowsPrincipal(id).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+            }
+            catch { return false; }
+        }
     }
 }
