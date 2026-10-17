@@ -61,6 +61,7 @@ public partial class App : Application
         Core.Programs.ProgramProcesses.OnError = Log;
         Core.Programs.InstallMonitor.OnError = Log;
         Core.Browsers.BrowserExtensions.OnError = Log;
+        Core.Cleaning.FileLocks.OnError = Log;
         WatchCloseSignal();
         DispatcherUnhandledException += OnUiException;
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject as Exception);

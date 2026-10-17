@@ -35,7 +35,8 @@ public sealed class QuarantineBatch
 }
 
 public sealed record RestoreReport(int Restored, int SkippedExisting, int Failed);
-public sealed record DeleteReport(long FreedBytes, int InUse, int Denied);
+/// <param name="Holders">Программы, которые держат оставшиеся файлы (например, «Проводник»), — если удалось узнать.</param>
+public sealed record DeleteReport(long FreedBytes, int InUse, int Denied, IReadOnlyList<string>? Holders = null);
 
 /// <summary>
 /// Карантин: каждая очистка — отдельная папка-«партия» с файлами и манифестом (откуда взят каждый файл).
@@ -206,17 +207,26 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
     public DeleteReport Delete(QuarantineBatch batch)
     {
         var left = new List<QuarantineEntry>();
+        var holders = new List<string>();
         int inUse = 0, denied = 0;
         foreach (var e in batch.Entries)
         {
             var stored = Path.Combine(batch.Dir, FilesDir, e.Stored);
             try { if (File.Exists(stored)) { File.SetAttributes(stored, FileAttributes.Normal); File.Delete(stored); } }
-            catch (UnauthorizedAccessException) { left.Add(e); denied++; }
-            catch (IOException) { left.Add(e); inUse++; }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                left.Add(e);
+                // Загруженную DLL Windows не даёт удалить с ответом «Отказано в доступе» — спрашиваем, кто её держит,
+                // чтобы не путать это с нехваткой прав.
+                var who = FileLocks.WhoUses(stored);
+                if (who.Count > 0) { inUse++; holders.AddRange(who); }
+                else if (ex is UnauthorizedAccessException) denied++;
+                else inUse++;
+            }
         }
         if (left.Count == 0) Directory.Delete(batch.Dir, recursive: true);
         else File.WriteAllLines(Path.Combine(batch.Dir, ManifestFile), left.Select(x => JsonSerializer.Serialize(x)));
-        return new DeleteReport(batch.TotalBytes - left.Sum(x => x.Size), inUse, denied);
+        return new DeleteReport(batch.TotalBytes - left.Sum(x => x.Size), inUse, denied, holders.Distinct().ToList());
     }
 
     /// <summary>Стереть партии старше 7 дней. Возвращает число стёртых партий.</summary>
