@@ -183,6 +183,8 @@ public partial class CleanPage : Page
             Content = new System.Windows.Controls.TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 },
             PrimaryButtonText = yes,
             CloseButtonText = no,
+            // Окно подстраивается под текст: при коротком вопросе оно узкое, и «Удалить навсегда» на кнопке обрезается.
+            MinWidth = 500,
         };
         return await box.ShowDialogAsync() == UiMessageBoxResult.Primary;
     }

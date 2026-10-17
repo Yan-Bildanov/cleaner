@@ -59,7 +59,7 @@ public partial class QuarantineWindow : FluentWindow
     {
         var batch = BatchOf(sender);
         if (!await CleanPage.Confirm("Удалить навсегда",
-                $"Удалить {Count(batch.Entries.Count)} ({Format.Bytes(batch.TotalBytes)}) навсегда?\nВернуть их будет нельзя.",
+                $"Удалить {Count(batch.Entries.Count)} ({Format.Bytes(batch.TotalBytes)}) навсегда?\nВернуть {(batch.Entries.Count == 1 ? "его" : "их")} будет нельзя.",
                 "Удалить навсегда")) return;
         var r = await Task.Run(() => App.Quarantine.Delete(batch));
         StatusText.Text = $"Удалено навсегда, освобождено {Format.Bytes(r.FreedBytes)}.";
