@@ -34,6 +34,11 @@
                         <ui:SymbolIcon Symbol="Broom24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Программы" TargetPageType="{x:Type pages:ProgramsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Apps24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Система" TargetPageType="{x:Type pages:SystemPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="Laptop24" />

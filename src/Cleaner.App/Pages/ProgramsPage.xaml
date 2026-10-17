@@ -1,0 +1,207 @@
+<Page x:Class="Cleaner.App.Pages.ProgramsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Программы">
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <Style x:Key="ColumnHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <Style x:Key="RowBorder" TargetType="Border">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,6" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Page.Resources>
+
+    <StackPanel Margin="28,8,28,24">
+        <!-- Заголовок -->
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <ui:TextBlock Text="Программы" FontTypography="TitleLarge" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="SummaryText" Text="Читаю список установленных программ…" Margin="0,4,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+            <ui:Button x:Name="RefreshButton" Grid.Column="1" Content="Обновить список" VerticalAlignment="Bottom"
+                       Icon="{ui:SymbolIcon ArrowClockwise24}" Click="Refresh_Click" />
+        </Grid>
+
+        <!-- Поиск и сортировка -->
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ui:TextBox x:Name="SearchBox" PlaceholderText="Поиск по названию или издателю" MaxWidth="420"
+                        HorizontalAlignment="Left" MinWidth="320" Icon="{ui:SymbolIcon Search24}"
+                        TextChanged="Search_TextChanged" ClearButtonEnabled="True" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Сортировка:" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <ComboBox x:Name="SortBox" Width="200" SelectedIndex="0" SelectionChanged="Sort_SelectionChanged">
+                    <ComboBoxItem Content="По названию" />
+                    <ComboBoxItem Content="По размеру" />
+                    <ComboBoxItem Content="По дате установки" />
+                </ComboBox>
+            </StackPanel>
+        </Grid>
+
+        <!-- Ход удаления -->
+        <ui:Card x:Name="StatusCard" Padding="16,12" Margin="0,0,0,12" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:ProgressRing x:Name="StatusRing" IsIndeterminate="True" Width="22" Height="22" Margin="0,0,12,0" />
+                <ui:SymbolIcon x:Name="StatusIcon" Symbol="CheckmarkCircle24" FontSize="22" Margin="0,0,12,0" Visibility="Collapsed" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusTitle" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <TextBlock x:Name="StatusText" FontSize="13" Margin="0,2,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Button x:Name="StopWaitingButton" Content="Хватит ждать" Click="StopWaiting_Click"
+                               ToolTip="Нажми, если закрыл окно деинсталлятора, а программа всё ещё ждёт" />
+                    <ui:Button x:Name="CloseStatusButton" Content="Закрыть" Appearance="Transparent" Margin="8,0,0,0"
+                               Click="CloseStatus_Click" Visibility="Collapsed" />
+                </StackPanel>
+            </Grid>
+        </ui:Card>
+
+        <!-- Хвосты после удаления -->
+        <ui:Card x:Name="LeftoversCard" Padding="20,16" Margin="0,0,0,12" Visibility="Collapsed">
+            <StackPanel>
+                <ui:TextBlock x:Name="LeftoversTitle" FontTypography="Subtitle" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock Margin="0,4,0,12" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="Отмеченное уйдёт в карантин на 7 дней — вернуть можно на вкладке «Очистка» → «Карантин». Пункты без галочки совпали только по имени издателя: проверь их, прежде чем отмечать." />
+                <ItemsControl x:Name="LeftoversList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox IsChecked="{Binding IsChecked}" VerticalAlignment="Top" MinWidth="0" Margin="0,0,4,0" />
+                                <ui:SymbolIcon Grid.Column="1" Symbol="{Binding Icon}" FontSize="18" VerticalAlignment="Top" Margin="0,6,10,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Grid.Column="2" Margin="0,4,0,0">
+                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" FontSize="12">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMedium}" Value="True">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <ui:Button x:Name="RemoveLeftoversButton" Content="Удалить отмеченное" Appearance="Primary"
+                               Icon="{ui:SymbolIcon Delete24}" Click="RemoveLeftovers_Click" />
+                    <ui:Button Content="Оставить как есть" Margin="8,0,0,0" Click="KeepLeftovers_Click" />
+                </StackPanel>
+            </StackPanel>
+        </ui:Card>
+
+        <ui:ProgressRing x:Name="Busy" IsIndeterminate="True" Margin="0,40" HorizontalAlignment="Center" />
+
+        <!-- Шапка таблицы -->
+        <Grid x:Name="HeaderRow" Margin="8,0,8,4" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="44" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="100" />
+                <ColumnDefinition Width="90" />
+                <ColumnDefinition Width="200" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="1" Text="Название" Style="{StaticResource ColumnHeader}" />
+            <TextBlock Grid.Column="2" Text="Установлена" Style="{StaticResource ColumnHeader}" />
+            <TextBlock Grid.Column="3" Text="Размер" Style="{StaticResource ColumnHeader}" TextAlignment="Right" Margin="0,0,12,0" />
+        </Grid>
+
+        <ItemsControl x:Name="ProgramsList">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource RowBorder}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="100" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="200" />
+                            </Grid.ColumnDefinitions>
+
+                            <Image Source="{Binding Icon}" Width="28" Height="28" HorizontalAlignment="Left"
+                                   VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding HasIcon, Converter={StaticResource BoolToVis}}" />
+                            <ui:SymbolIcon Symbol="AppGeneric24" FontSize="26" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                                <ui:SymbolIcon.Style>
+                                    <Style TargetType="ui:SymbolIcon">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasIcon}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ui:SymbolIcon.Style>
+                            </ui:SymbolIcon>
+
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding Subtitle}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding DateText}" VerticalAlignment="Center" FontSize="13"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="3" Text="{Binding SizeText}" VerticalAlignment="Center" FontSize="13"
+                                       TextAlignment="Right" Margin="0,0,12,0"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <ui:Button Content="Папка" Icon="{ui:SymbolIcon Folder24}" Appearance="Transparent"
+                                           Tag="{Binding}" Click="OpenFolder_Click" Margin="0,0,6,0"
+                                           ToolTip="Открыть папку установки в Проводнике"
+                                           Visibility="{Binding HasFolder, Converter={StaticResource BoolToVis}}" />
+                                <ui:Button Content="Удалить" Icon="{ui:SymbolIcon Delete24}"
+                                           Tag="{Binding}" Click="Uninstall_Click"
+                                           IsEnabled="{Binding CanUninstall}" ToolTip="{Binding UninstallTooltip}"
+                                           ToolTipService.ShowOnDisabled="True" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock x:Name="EmptyText" Text="Ничего не найдено" Margin="8,24" Visibility="Collapsed"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+    </StackPanel>
+</Page>

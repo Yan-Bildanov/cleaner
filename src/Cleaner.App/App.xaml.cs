@@ -51,6 +51,10 @@ public partial class App : Application
 
         Core.Cleaning.QuarantineStore.OnError = Log;
         Core.Rules.LocalRules.OnError = Log;
+        Core.Programs.ProgramInventory.OnError = Log;
+        Core.Programs.Uninstaller.OnError = Log;
+        Core.Programs.LeftoverScanner.OnError = Log;
+        Core.Cleaning.RegistryBackup.OnError = Log;
         WatchCloseSignal();
         DispatcherUnhandledException += OnUiException;
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject as Exception);
@@ -62,6 +66,16 @@ public partial class App : Application
         //   --dry-run  только посчитать, ничего не трогать (для проверки)
         var args = e.Args.Select(a => a.ToLowerInvariant()).ToHashSet();
         if (args.Contains("--auto")) { _ = AutoMode.RunAsync(force: args.Contains("--now"), dryRun: args.Contains("--dry-run")); return; }
+
+        // «Cleaner.exe --remove-leftovers plan.json» — повышенный помощник: убрать хвосты, которым нужны права администратора.
+        var planIndex = Array.FindIndex(e.Args, a => a.Equals(Core.Programs.LeftoverPlan.Argument, StringComparison.OrdinalIgnoreCase));
+        if (planIndex >= 0)
+        {
+            try { if (planIndex + 1 < e.Args.Length) Core.Programs.LeftoverPlan.Execute(e.Args[planIndex + 1], Quarantine); }
+            catch (Exception ex) { Log(ex); }
+            Shutdown();
+            return;
+        }
 
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         MainWindow = new MainWindow();

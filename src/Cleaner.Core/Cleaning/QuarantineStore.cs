@@ -3,7 +3,20 @@ using Cleaner.Core.Platform;
 
 namespace Cleaner.Core.Cleaning;
 
-public sealed record QuarantineEntry(string Original, string Stored, long Size, string RuleId);
+/// <summary>
+/// Запись карантина. Kind: null — файл (как в первых версиях), <see cref="KindDir"/> — папка (при возврате создаётся заново),
+/// <see cref="KindReg64"/>/<see cref="KindReg32"/>/<see cref="KindRegUser"/> — ключ реестра, сохранённый в .reg (Stored).
+/// </summary>
+public sealed record QuarantineEntry(string Original, string Stored, long Size, string RuleId, string? Kind = null)
+{
+    public const string KindDir = "dir";
+    public const string KindReg64 = "reg64";
+    public const string KindReg32 = "reg32";
+    public const string KindRegUser = "reg";
+
+    public bool IsRegistry => Kind is KindReg64 or KindReg32 or KindRegUser;
+    public bool IsDir => Kind == KindDir;
+}
 
 public sealed class QuarantineBatch
 {
@@ -87,9 +100,26 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
     {
         int restored = 0, existing = 0, failed = 0;
         var remaining = new List<QuarantineEntry>();
-        foreach (var e in batch.Entries)
+        // Сначала папки (от верхних к вложенным), потом файлы и ключи реестра.
+        foreach (var e in batch.Entries.OrderBy(x => x.IsDir ? 0 : 1).ThenBy(x => x.Original.Length))
         {
             var stored = Path.Combine(batch.Dir, FilesDir, e.Stored);
+            if (e.IsDir)
+            {
+                try { Directory.CreateDirectory(e.Original); restored++; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failed++; remaining.Add(e); }
+                continue;
+            }
+            if (e.IsRegistry)
+            {
+                switch (RegistryBackup.Restore(e.Original, e.Kind!, stored))
+                {
+                    case RegistryRestoreOutcome.Restored: restored++; break;
+                    case RegistryRestoreOutcome.AlreadyExists: existing++; remaining.Add(e); break;
+                    default: failed++; remaining.Add(e); break;
+                }
+                continue;
+            }
             try
             {
                 if (File.Exists(e.Original)) { existing++; remaining.Add(e); continue; }
