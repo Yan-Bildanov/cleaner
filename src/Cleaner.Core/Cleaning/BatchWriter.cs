@@ -102,6 +102,17 @@ public sealed class BatchWriter : IDisposable
         return true;
     }
 
+    /// <summary>Значение автозагрузки: тип и данные → JSON, затем удаление значения.</summary>
+    public RegistryMoveOutcome MoveRegistryValue(string keyPath, Microsoft.Win32.RegistryView view, string name, string ruleId)
+    {
+        var stored = (++_counter).ToString("D6") + ".json";
+        var file = Path.Combine(Dir, QuarantineStore.FilesDir, stored);
+        var outcome = RegistryBackup.SaveValueAndDelete(keyPath, view, name, file);
+        if (outcome != RegistryMoveOutcome.Moved) { try { File.Delete(file); } catch { } return outcome; }
+        Record(keyPath + "|" + name, stored, file, ruleId, QuarantineEntry.KindRegValue);
+        return outcome;
+    }
+
     void Record(string original, string stored, string file, string ruleId, string kind)
     {
         long size = 0;

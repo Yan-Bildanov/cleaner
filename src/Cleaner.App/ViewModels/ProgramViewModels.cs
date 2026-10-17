@@ -10,8 +10,13 @@ public sealed class ProgramItemViewModel(InstalledProgram program) : Observable
     public InstalledProgram Program { get; } = program;
 
     public string Name => Program.Name;
-    public string Subtitle => string.Join(" · ", new[] { Program.IsStoreApp ? "Microsoft Store" : null, Program.Publisher, Program.Version }
+    public string Subtitle => string.Join(" · ", new[] { Program.IsStoreApp ? "Microsoft Store" : null, Program.Publisher, Program.Version,
+                                                         IsTraced ? "установка записана" : null }
                                                      .Where(s => !string.IsNullOrEmpty(s)));
+
+    bool _isTraced;
+    /// <summary>Установка этой программы записана монитором — хвосты найдутся точно по записи.</summary>
+    public bool IsTraced { get => _isTraced; set { Set(ref _isTraced, value); OnPropertyChanged(nameof(Subtitle)); } }
     public string DateText => Program.InstallDate?.ToString("dd.MM.yyyy") ?? "—";
     public bool CanUninstall => Program.CanUninstall;
     public bool HasFolder => !Program.IsStoreApp && Program.InstallLocation is { } f && Directory.Exists(f);

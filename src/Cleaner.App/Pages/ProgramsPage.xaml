@@ -81,9 +81,63 @@
                 <TextBlock x:Name="SummaryText" Text="Читаю список установленных программ…" Margin="0,4,0,0" TextWrapping="Wrap"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             </StackPanel>
-            <ui:Button x:Name="RefreshButton" Grid.Column="1" Content="Обновить список" VerticalAlignment="Bottom"
-                       Icon="{ui:SymbolIcon ArrowClockwise24}" Click="Refresh_Click" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
+                <ui:Button x:Name="MonitorButton" Content="Установить с отслеживанием" Margin="0,0,8,0"
+                           Icon="{ui:SymbolIcon Eye24}" Click="StartMonitor_Click"
+                           ToolTip="Запомнить, что именно поставит новая программа, чтобы потом удалить её начисто" />
+                <ui:Button x:Name="RefreshButton" Content="Обновить список"
+                           Icon="{ui:SymbolIcon ArrowClockwise24}" Click="Refresh_Click" />
+            </StackPanel>
         </Grid>
+
+        <!-- Монитор установок -->
+        <ui:Card x:Name="MonitorCard" Padding="20,16" Margin="0,0,0,12" Visibility="Collapsed">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <ui:ProgressRing x:Name="MonitorRing" IsIndeterminate="True" Width="20" Height="20" Margin="0,0,12,0" />
+                    <ui:SymbolIcon x:Name="MonitorIcon" Symbol="Eye24" FontSize="20" Margin="0,0,12,0" Visibility="Collapsed"
+                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                    <ui:TextBlock x:Name="MonitorTitle" FontTypography="Subtitle" VerticalAlignment="Center"
+                                  Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </StackPanel>
+                <TextBlock x:Name="MonitorText" Margin="0,8,0,12" TextWrapping="Wrap" FontSize="13"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+                <ItemsControl x:Name="MonitorList" Visibility="Collapsed" Margin="0,0,0,8">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox IsChecked="{Binding IsChecked}" Style="{StaticResource CompactCheck}" VerticalAlignment="Top" Margin="0,4,10,0" />
+                                <ui:SymbolIcon Grid.Column="1" Symbol="{Binding Icon}" FontSize="18" VerticalAlignment="Top" Margin="0,6,10,0"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <StackPanel Grid.Column="2" Margin="0,4,0,0">
+                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap" FontSize="13"
+                                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                    <TextBlock Text="{Binding Detail}" TextWrapping="Wrap" FontSize="12"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <WrapPanel>
+                    <ui:Button x:Name="MonitorLaunchButton" Content="Запустить установщик…" Margin="0,0,8,8"
+                               Icon="{ui:SymbolIcon Open24}" Click="MonitorLaunch_Click" />
+                    <ui:Button x:Name="MonitorDoneButton" Content="Установка завершена" Appearance="Primary" Margin="0,0,8,8"
+                               Icon="{ui:SymbolIcon Checkmark24}" Click="MonitorDone_Click" />
+                    <ui:Button x:Name="MonitorSaveButton" Content="Сохранить запись" Appearance="Primary" Margin="0,0,8,8"
+                               Icon="{ui:SymbolIcon Save24}" Click="MonitorSave_Click" />
+                    <ui:Button x:Name="MonitorCancelButton" Content="Отменить" Appearance="Transparent" Margin="0,0,8,8"
+                               Click="MonitorCancel_Click" />
+                </WrapPanel>
+            </StackPanel>
+        </ui:Card>
 
         <!-- Поиск и сортировка -->
         <Grid Margin="0,0,0,12">

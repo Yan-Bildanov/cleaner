@@ -14,8 +14,10 @@ public static class ForcedUninstall
     {
         if (program.IsStoreApp) return [];
         var others = all.Where(o => !(o.Scope == program.Scope && o.RegistryKeyName == program.RegistryKeyName)).ToList();
-        var found = LeftoverScanner.ForCurrentSystem().Scan(program, others).ToList();
-        found.Add(UninstallEntry(program));
+        var found = InstallMonitor.LeftoversFor(program, others, LeftoverScanner.ForCurrentSystem(), TraceStore.Default).ToList();
+        var entry = UninstallEntry(program);
+        if (!found.Any(f => f.Kind == LeftoverKind.RegistryKey && f.Path.Equals(entry.Path, StringComparison.OrdinalIgnoreCase)))
+            found.Add(entry);
         return found;
     }
 

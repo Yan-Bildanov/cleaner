@@ -4,7 +4,11 @@ using Microsoft.Win32;
 
 namespace Cleaner.Core.Programs;
 
-public enum LeftoverKind { Folder, Shortcut, RegistryKey, Service, ScheduledTask }
+/// <summary>
+/// File — отдельный файл (из записи монитора), RegistryValue — значение автозагрузки (Run/RunOnce): Path — ключ, ValueName — имя.
+/// Новые значения добавлять только в конец: записи и планы хранятся на диске числами.
+/// </summary>
+public enum LeftoverKind { Folder, Shortcut, RegistryKey, Service, ScheduledTask, File, RegistryValue }
 
 /// <summary>
 /// High — имя папки/ключа точно совпадает с названием программы или это её папка установки (отмечено по умолчанию).
@@ -20,7 +24,9 @@ public sealed record Leftover(
     long Size = 0,
     int FileCount = 0,
     RegistryView View = RegistryView.Default,
-    bool NeedsAdmin = false)
+    bool NeedsAdmin = false,
+    string? ValueName = null,
+    bool FromTrace = false)
 {
     [JsonIgnore] public bool IsEmptyFolder => Kind == LeftoverKind.Folder && FileCount == 0;
 }
@@ -66,6 +72,8 @@ public sealed partial class LeftoverScanner(
         {
             F(Environment.SpecialFolder.ProgramFiles),
             F(Environment.SpecialFolder.ProgramFilesX86),
+            F(Environment.SpecialFolder.CommonProgramFiles),          // Common Files\Steam и т. п.
+            F(Environment.SpecialFolder.CommonProgramFilesX86),
             F(Environment.SpecialFolder.CommonApplicationData),
             F(Environment.SpecialFolder.ApplicationData),
             local,

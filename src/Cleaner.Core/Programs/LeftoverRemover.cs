@@ -17,7 +17,9 @@ public static class LeftoverRemover
     {
         LeftoverKind.ScheduledTask => 0,
         LeftoverKind.Service => 1,
+        LeftoverKind.RegistryValue => 1,
         LeftoverKind.Shortcut => 2,
+        LeftoverKind.File => 2,
         LeftoverKind.Folder => 3,
         _ => 4,
     };
@@ -43,7 +45,12 @@ public static class LeftoverRemover
                 if (item.NeedsAdmin && !isElevated) { needAdmin.Add(item); continue; }
 
                 // Последняя проверка перед действием: никаких системных веток и общих папок, что бы ни пришло на вход.
-                if (item.Kind == LeftoverKind.RegistryKey && !LeftoverPlan.IsSoftwareSubkey(item.Path)) { denied++; continue; }
+                if (item.Kind == LeftoverKind.RegistryKey && !LeftoverPlan.IsSoftwareSubkey(item.Path)
+                    && !(item.FromTrace && LeftoverPlan.IsTracedClassesKey(item.Path))
+                    && !LeftoverPlan.IsBrowserExtensionKey(item.Path)) { denied++; continue; }
+                if (item.Kind == LeftoverKind.RegistryValue && (item.ValueName is null || !LeftoverPlan.IsAutostartKey(item.Path))) { denied++; continue; }
+                if (item.Kind == LeftoverKind.File && (SystemServices.IsSystemLocation(item.Path)
+                    || LeftoverScanner.IsInside(item.Path, AppPaths.DataDir))) { denied++; continue; }
                 if (item.Kind == LeftoverKind.Folder && Directory.Exists(item.Path) && !ProgramInventory.IsProgramOwnFolder(item.Path)) { denied++; continue; }
                 if (item.Kind == LeftoverKind.Service && !SystemServices.IsSafeToRemove(item.Path)) { denied++; continue; }
                 if (item.Kind == LeftoverKind.ScheduledTask && item.Path.StartsWith(@"\Microsoft\", StringComparison.OrdinalIgnoreCase)) { denied++; continue; }
@@ -64,7 +71,17 @@ public static class LeftoverRemover
                         if (batch.MoveService(item.Path, ruleId)) removed++; else denied++;
                         break;
 
+                    case LeftoverKind.RegistryValue:
+                        switch (batch.MoveRegistryValue(item.Path, item.View, item.ValueName!, ruleId))
+                        {
+                            case RegistryMoveOutcome.Moved: removed++; break;
+                            case RegistryMoveOutcome.Missing: break;
+                            default: denied++; break;
+                        }
+                        break;
+
                     case LeftoverKind.Shortcut:
+                    case LeftoverKind.File:
                         switch (batch.Move(item.Path, item.Size, ruleId))
                         {
                             case MoveOutcome.Moved: removed++; bytes += item.Size; break;

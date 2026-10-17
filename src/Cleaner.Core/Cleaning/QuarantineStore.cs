@@ -17,9 +17,11 @@ public sealed record QuarantineEntry(string Original, string Stored, long Size, 
     public const string KindService = "svc";
     /// <summary>Задача Планировщика: Original — путь задачи, Stored — её XML.</summary>
     public const string KindTask = "task";
+    /// <summary>Значение реестра (автозагрузка): Original — «ключ|имя», Stored — JSON с типом и данными.</summary>
+    public const string KindRegValue = "regval";
 
-    public bool IsRegistry => Kind is KindReg64 or KindReg32 or KindRegUser;
-    public bool IsDir => Kind == KindDir;
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsRegistry => Kind is KindReg64 or KindReg32 or KindRegUser;
+    [System.Text.Json.Serialization.JsonIgnore] public bool IsDir => Kind == KindDir;
 }
 
 public sealed class QuarantineBatch
@@ -118,6 +120,16 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
             {
                 // Ключ службы возвращается импортом; сама служба заработает после перезагрузки.
                 switch (RegistryBackup.Restore(Programs.SystemServices.KeyPath(e.Original), QuarantineEntry.KindReg64, stored))
+                {
+                    case RegistryRestoreOutcome.Restored: restored++; break;
+                    case RegistryRestoreOutcome.AlreadyExists: existing++; remaining.Add(e); break;
+                    default: failed++; remaining.Add(e); break;
+                }
+                continue;
+            }
+            if (e.Kind == QuarantineEntry.KindRegValue)
+            {
+                switch (RegistryBackup.RestoreValue(stored))
                 {
                     case RegistryRestoreOutcome.Restored: restored++; break;
                     case RegistryRestoreOutcome.AlreadyExists: existing++; remaining.Add(e); break;

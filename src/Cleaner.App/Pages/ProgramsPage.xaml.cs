@@ -25,6 +25,7 @@ public partial class ProgramsPage : Page
         Loaded += async (_, _) =>
         {
             _current = this;
+            RestoreMonitorState();
             if (_all is not null) { Busy.Visibility = Visibility.Collapsed; ProgramsList.Visibility = HeaderRow.Visibility = Visibility.Visible; ApplyView(); }
             else await LoadAsync();
         };
@@ -40,10 +41,16 @@ public partial class ProgramsPage : Page
         ProgramsList.Visibility = HeaderRow.Visibility = Visibility.Collapsed;
         SummaryText.Text = "Читаю список установленных программ…";
 
-        var programs = await Task.Run(() => ProgramInventory.ReadAll().Concat(StoreApps.ReadAll()).ToList());
+        var (programs, traced) = await Task.Run(() =>
+        {
+            var list = ProgramInventory.ReadAll().Concat(StoreApps.ReadAll()).ToList();
+            var keys = TraceStore.Default.All().SelectMany(t => t.Programs).Select(x => x.Scope + "|" + x.RegistryKeyName)
+                                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return (list, keys);
+        });
         _all = programs.Select(p =>
         {
-            var vm = new ProgramItemViewModel(p);
+            var vm = new ProgramItemViewModel(p) { IsTraced = traced.Contains(p.Scope + "|" + p.RegistryKeyName) };
             vm.CheckedChanged += () => _current?.UpdateBatchBar();
             return vm;
         }).ToList();
@@ -314,6 +321,7 @@ public partial class ProgramsPage : Page
         if (procs.Count > 0)
             note += "\nПеред удалением будут закрыты запущенные из её папки процессы: " +
                     string.Join(", ", procs.Select(r => r.Name).Distinct()) + ".";
+        _leftoversPrograms = [p];
         ShowLeftovers(plan, $"Принудительное удаление «{p.Name}»: найдено {plan.Count} " + Plural(plan.Count, "объект", "объекта", "объектов"),
                       p.Name, note, forced: p);
     }
@@ -334,12 +342,11 @@ public partial class ProgramsPage : Page
             {
                 var still = ProgramInventory.ReadAll();     // свежий список: что-то могло удалиться вместе с программой
                 var scanner = LeftoverScanner.ForCurrentSystem();
-                var all = new List<Leftover>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var traces = TraceStore.Default;
+                IReadOnlyList<Leftover> all = [];
                 foreach (var p in removed)
-                    foreach (var l in scanner.Scan(p, still))
-                        if (seen.Add($"{l.Kind}|{l.Path}|{l.View}")) all.Add(l);
-                return (IReadOnlyList<Leftover>)all;
+                    all = InstallMonitor.Combine(all, InstallMonitor.LeftoversFor(p, still, scanner, traces));
+                return all;
             });
         }
         catch (Exception ex)
@@ -349,8 +356,10 @@ public partial class ProgramsPage : Page
             return;
         }
 
+        _leftoversPrograms = removed.ToList();
         if (found.Count == 0)
         {
+            ForgetTraces(removed);
             ShowStatus(title, (extraNote is null ? "" : extraNote + "\n") + "Хвостов не найдено — всё удалилось чисто.", done: true, ok: extraNote is null);
             return;
         }
@@ -380,6 +389,7 @@ public partial class ProgramsPage : Page
 
     void KeepLeftovers_Click(object sender, RoutedEventArgs e)
     {
+        if (_leftoversForced is null) ForgetTraces(_leftoversPrograms);
         LeftoversCard.Visibility = Visibility.Collapsed;
         _leftovers = [];
         _leftoversForced = null;
@@ -418,6 +428,7 @@ public partial class ProgramsPage : Page
         LeftoversCard.Visibility = Visibility.Collapsed;
         _leftovers = [];
         _leftoversForced = null;
+        ForgetTraces(_leftoversPrograms);
 
         if (forced is not null && _all is not null && !ProgramInventory.Exists(forced))
         {
@@ -462,6 +473,204 @@ public partial class ProgramsPage : Page
     {
         var m10 = n % 10; var m100 = n % 100;
         return m10 == 1 && m100 != 11 ? one : m10 is >= 2 and <= 4 && m100 is < 12 or > 14 ? few : many;
+    }
+
+    List<InstalledProgram> _leftoversPrograms = [];
+
+    /// <summary>Записи монитора для программ, которых больше нет, больше не нужны.</summary>
+    static void ForgetTraces(IEnumerable<InstalledProgram> programs)
+    {
+        try
+        {
+            var store = TraceStore.Default;
+            foreach (var p in programs)
+                if (!ProgramInventory.Exists(p) && store.FindFor(p) is { } t) store.Delete(t);
+        }
+        catch (Exception ex) { App.Log(ex); }
+    }
+
+    // ── Монитор установок ──────────────────────────────────────────────────────────────────────
+    // Снимок «до» живёт между переходами по вкладкам и на диске (pending.json) — на случай, если окно закроют посреди установки.
+    static InstallSnapshot? _before;
+    static InstallTrace? _trace;
+    List<LeftoverItemViewModel> _traceItems = [];
+
+    enum MonitorStage { Hidden, Working, Watching, Result }
+
+    void SetMonitor(MonitorStage stage, string title = "", string text = "")
+    {
+        MonitorCard.Visibility = stage == MonitorStage.Hidden ? Visibility.Collapsed : Visibility.Visible;
+        MonitorTitle.Text = title;
+        MonitorText.Text = text;
+        MonitorRing.Visibility = stage == MonitorStage.Working ? Visibility.Visible : Visibility.Collapsed;
+        MonitorIcon.Visibility = stage == MonitorStage.Working ? Visibility.Collapsed : Visibility.Visible;
+        MonitorLaunchButton.Visibility = stage == MonitorStage.Watching ? Visibility.Visible : Visibility.Collapsed;
+        MonitorDoneButton.Visibility = stage == MonitorStage.Watching ? Visibility.Visible : Visibility.Collapsed;
+        MonitorSaveButton.Visibility = stage == MonitorStage.Result ? Visibility.Visible : Visibility.Collapsed;
+        MonitorCancelButton.Visibility = stage is MonitorStage.Watching or MonitorStage.Result ? Visibility.Visible : Visibility.Collapsed;
+        MonitorCancelButton.Content = stage == MonitorStage.Result ? (_trace?.Programs.Count > 0 ? "Удалить запись" : "Закрыть") : "Отменить";
+        MonitorSaveButton.Content = "Готово";
+        MonitorList.Visibility = stage == MonitorStage.Result ? Visibility.Visible : Visibility.Collapsed;
+        MonitorButton.IsEnabled = stage == MonitorStage.Hidden;
+    }
+
+    const string WatchingText =
+        "Снимок «до» сделан. Теперь установи программу как обычно: кнопкой ниже или как угодно ещё (из браузера, из папки «Загрузки»). " +
+        "Во время установки лучше не ставить и не удалять ничего другого. Когда установщик закончит и программа запустится, нажми «Установка завершена».";
+
+    void RestoreMonitorState()
+    {
+        if (_trace is not null) { ShowTraceResult(_trace); return; }
+        _before ??= TraceStore.Default.LoadPending();
+        if (_before is not null && DateTime.UtcNow - _before.TakenUtc < TimeSpan.FromDays(3))
+            SetMonitor(MonitorStage.Watching, "Идёт отслеживание установки", WatchingText +
+                       $"\nСнимок сделан {_before.TakenUtc.ToLocalTime():dd.MM HH:mm}.");
+        else
+        {
+            if (_before is not null) TraceStore.Default.ClearPending();
+            _before = null;
+            SetMonitor(MonitorStage.Hidden);
+        }
+    }
+
+    async void StartMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        if (!EnsureNotBusy()) return;
+        SetMonitor(MonitorStage.Working, "Запоминаю систему перед установкой…",
+                   "Записываю папки программ, ярлыки, реестр, службы, задачи и автозагрузку. Это займёт несколько секунд.");
+        try
+        {
+            _before = await Task.Run(() => InstallMonitor.Capture(SnapshotScope.ForCurrentSystem()));
+            TraceStore.Default.SavePending(_before);
+            SetMonitor(MonitorStage.Watching, "Идёт отслеживание установки", WatchingText);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            _before = null;
+            SetMonitor(MonitorStage.Hidden);
+            ShowStatus("Не получилось", "Не удалось сделать снимок системы — подробности в журнале ошибок.", done: true, ok: false);
+        }
+    }
+
+    void MonitorLaunch_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Выбери установщик программы",
+            Filter = "Установщики (*.exe; *.msi)|*.exe;*.msi|Все файлы|*.*",
+            InitialDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+        };
+        if (dlg.ShowDialog() != true) return;
+        try { Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true }); }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { }
+        catch (Exception ex) { App.Log(ex); ShowStatus("Не удалось запустить установщик", ex.Message, done: true, ok: false); }
+    }
+
+    async void MonitorDone_Click(object sender, RoutedEventArgs e)
+    {
+        if (_before is null) { SetMonitor(MonitorStage.Hidden); return; }
+        SetMonitor(MonitorStage.Working, "Сравниваю систему до и после установки…", "Делаю второй снимок и ищу, что появилось.");
+        try
+        {
+            var before = _before;
+            var trace = await Task.Run(() =>
+            {
+                var after = InstallMonitor.Capture(SnapshotScope.ForCurrentSystem());
+                return InstallMonitor.Diff(before, after);
+            });
+            _trace = trace;
+            // Запись сохраняется сразу, чтобы её нельзя было потерять (обновить список, закрыть окно, начать новое отслеживание).
+            // «Готово» сохраняет снятые галочки, «Удалить запись» — удаляет её.
+            if (trace.Programs.Count > 0 && trace.Items.Count > 0)
+            {
+                try { TraceStore.Default.Save(trace); }
+                catch (Exception ex) { App.Log(ex); }
+            }
+            TraceStore.Default.ClearPending();
+            _before = null;
+            ShowTraceResult(trace);
+            if (trace.Programs.Count > 0) await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            SetMonitor(MonitorStage.Watching, "Идёт отслеживание установки", "Не удалось сделать второй снимок — попробуй ещё раз. Подробности в журнале ошибок.");
+        }
+    }
+
+    void ShowTraceResult(InstallTrace trace)
+    {
+        _traceItems = trace.Items.Select(i => new LeftoverItemViewModel(new Leftover(i.Kind, i.Path, LeftoverConfidence.High,
+            "появилось во время установки", Size: i.Kind is LeftoverKind.File or LeftoverKind.Shortcut ? SafeSize(i.Path) : 0,
+            FileCount: i.Kind == LeftoverKind.Folder ? -1 : 1, View: i.View, ValueName: i.ValueName))).ToList();
+        MonitorList.ItemsSource = _traceItems;
+
+        string title, text;
+        if (trace.Programs.Count > 0)
+        {
+            title = "Установлено: " + string.Join(", ", trace.Programs.Select(p => p.Name));
+            text = $"Во время установки появилось {_traceItems.Count} " + Plural(_traceItems.Count, "объект", "объекта", "объектов") +
+                   ". Запись уже сохранена. Если что-то здесь точно не относится к этой программе (например, в это время обновлялась другая), " +
+                   "сними галочку и нажми «Готово». Когда будешь удалять программу, всё отмеченное найдётся автоматически.";
+        }
+        else
+        {
+            title = "Новых программ в списке установленных не появилось";
+            text = _traceItems.Count > 0
+                ? "Похоже, установщик ещё не закончил или программа не регистрируется в списке установленных. Запись можно сохранить, но " +
+                  "привязать её к программе не получится. Лучше нажать «Закрыть» и начать заново, если установка ещё идёт."
+                : "Изменений не найдено. Возможно, установщик ещё не закончил работу.";
+        }
+        SetMonitor(MonitorStage.Result, title, text);
+        MonitorSaveButton.IsEnabled = trace.Programs.Count > 0 && _traceItems.Count > 0;
+    }
+
+    static long SafeSize(string path) { try { return new FileInfo(path).Length; } catch { return 0; } }
+
+    async void MonitorSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (_trace is null) return;
+        var keep = _traceItems.Where(i => i.IsChecked).Select(i => i.Leftover).ToHashSet();
+        _trace.Items = _trace.Items.Where(i => keep.Any(l => l.Kind == i.Kind && l.Path == i.Path && l.View == i.View && l.ValueName == i.ValueName)).ToList();
+        try { TraceStore.Default.Save(_trace); }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            ShowStatus("Не удалось сохранить запись", ex.Message, done: true, ok: false);
+            return;
+        }
+        var title = _trace.Title;
+        var count = _trace.Items.Count;
+        FinishMonitor();
+        ShowStatus("Запись установки сохранена", $"«{title}»: записано {count} " + Plural(count, "объект", "объекта", "объектов") +
+                   ". При удалении этой программы всё записанное найдётся автоматически.", done: true, ok: true);
+        await LoadAsync();
+    }
+
+    async void MonitorCancel_Click(object sender, RoutedEventArgs e)
+    {
+        // В результате с найденной программой это «Удалить запись»: запись уже на диске — убираем её.
+        if (_trace is { Programs.Count: > 0 } t)
+        {
+            if (!await CleanPage.Confirm("Удалить запись установки?",
+                    $"Запись «{t.Title}» будет удалена. При удалении программы хвосты будут искаться только по именам.", "Удалить запись"))
+                return;
+            TraceStore.Default.Delete(t);
+            FinishMonitor();
+            await LoadAsync();
+            return;
+        }
+        FinishMonitor();
+    }
+
+    void FinishMonitor()
+    {
+        TraceStore.Default.ClearPending();
+        _before = null;
+        _trace = null;
+        _traceItems = [];
+        SetMonitor(MonitorStage.Hidden);
     }
 
     void StopWaiting_Click(object sender, RoutedEventArgs e) => _stopWaiting?.Cancel();

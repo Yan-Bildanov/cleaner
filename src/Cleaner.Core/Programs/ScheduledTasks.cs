@@ -54,6 +54,31 @@ public static class ScheduledTasks
         catch (Exception ex) { OnError?.Invoke(ex); }
     }
 
+    /// <summary>Пути всех задач (для снимка монитора установок).</summary>
+    public static IReadOnlyList<string> AllPaths()
+    {
+        var result = new List<string>();
+        try
+        {
+            dynamic service = Activator.CreateInstance(Type.GetTypeFromProgID("Schedule.Service")!)!;
+            service.Connect();
+            CollectPaths(service.GetFolder("\\"), result, 0);
+        }
+        catch (Exception ex) { OnError?.Invoke(ex); }
+        return result;
+    }
+
+    static void CollectPaths(dynamic folder, List<string> into, int depth)
+    {
+        if (depth > 8) return;
+        try
+        {
+            foreach (dynamic task in folder.GetTasks(1)) { try { into.Add((string)task.Path); } catch { } }
+            foreach (dynamic sub in folder.GetFolders(0)) CollectPaths(sub, into, depth + 1);
+        }
+        catch (Exception ex) { OnError?.Invoke(ex); }
+    }
+
     /// <summary>Сохранить XML задачи в файл и удалить задачу.</summary>
     public static bool ExportAndDelete(string taskPath, string backupFile)
     {

@@ -25,6 +25,33 @@ public class RealSystemProgramsTests(ITestOutputHelper output)
     }
 
     [Fact, Trait("Category", "RealSystem")]
+    public void List_browser_extensions_read_only()
+    {
+        foreach (var e in Cleaner.Core.Browsers.BrowserExtensions.ReadAll())
+            output.WriteLine($"EXT {e.Browser.Name,-7} | {e.ProfileName,-14} | {e.Name,-35} | {e.Version,-12} | {(e.Enabled ? "on " : "off")} | {e.Source,-9} | {Format.Bytes(e.Size),8} | " +
+                             $"{(e.IconPath is null ? "no-icon" : "icon")} | key={e.ExternalKey} | WARN: {string.Join("; ", e.Warnings)} | NOTE: {string.Join("; ", e.Notes)}");
+        foreach (var b in Cleaner.Core.Browsers.BrowserDef.Known())
+            output.WriteLine($"EXE {b.Name}: {Cleaner.Core.Browsers.BrowserExtensions.BrowserExe(b)}");
+    }
+
+    /// <summary>Два снимка подряд без установки: всё, что найдётся, — шум. ТОЛЬКО ЧТЕНИЕ.</summary>
+    [Fact, Trait("Category", "RealSystem")]
+    public void Monitor_snapshot_noise_without_install_read_only()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var scope = SnapshotScope.ForCurrentSystem();
+        var a = InstallMonitor.Capture(scope);
+        output.WriteLine($"SNAPSHOT: {sw.Elapsed.TotalSeconds:F1} s · paths {a.Paths.Count} · keys {a.Keys.Count} · services {a.Services.Count} · tasks {a.Tasks.Count} · run {a.RunValues.Count} · programs {a.Uninstall.Count}");
+        Thread.Sleep(20_000);
+        var b = InstallMonitor.Capture(scope);
+        var d = InstallMonitor.Diff(a, b);
+        output.WriteLine($"NOISE: {d.Items.Count}");
+        foreach (var i in d.Items) output.WriteLine($"NOISE {i.Kind} {i.Path} {i.ValueName}");
+        var json = System.Text.Json.JsonSerializer.Serialize(a);
+        output.WriteLine($"PENDING SIZE: {json.Length / 1024} KB");
+    }
+
+    [Fact, Trait("Category", "RealSystem")]
     public void List_store_apps_and_broken_programs_read_only()
     {
         foreach (var a in StoreApps.ReadAll())

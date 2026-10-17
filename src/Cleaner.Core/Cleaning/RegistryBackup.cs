@@ -89,6 +89,77 @@ public static class RegistryBackup
         }
     }
 
+    // ── Отдельные значения (автозагрузка Run/RunOnce) ────────────────────────────────────────────
+    public sealed record SavedValue(string Key, RegistryView View, string Name, RegistryValueKind Kind,
+                                    string? Text = null, string[]? Lines = null, long Number = 0, string? Base64 = null);
+
+    static RegistryKey OpenBase(string keyPath, RegistryView view, out string sub)
+    {
+        var (hive, s) = Split(keyPath);
+        sub = s;
+        return RegistryKey.OpenBaseKey(hive, hive == RegistryHive.CurrentUser ? RegistryView.Default : view);
+    }
+
+    public static bool ValueExists(string keyPath, RegistryView view, string name)
+    {
+        try
+        {
+            using var b = OpenBase(keyPath, view, out var sub);
+            using var k = b.OpenSubKey(sub);
+            return k?.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase) == true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Сохранить значение (имя, тип, данные) в JSON, затем удалить его из ключа.</summary>
+    public static RegistryMoveOutcome SaveValueAndDelete(string keyPath, RegistryView view, string name, string toFile)
+    {
+        try
+        {
+            using var b = OpenBase(keyPath, view, out var sub);
+            using var k = b.OpenSubKey(sub, writable: true);
+            if (k is null || !k.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase)) return RegistryMoveOutcome.Missing;
+            var kind = k.GetValueKind(name);
+            var data = k.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            var saved = data switch
+            {
+                string s => new SavedValue(keyPath, view, name, kind, Text: s),
+                string[] lines => new SavedValue(keyPath, view, name, kind, Lines: lines),
+                int i => new SavedValue(keyPath, view, name, kind, Number: i),
+                long l => new SavedValue(keyPath, view, name, kind, Number: l),
+                byte[] bytes => new SavedValue(keyPath, view, name, kind, Base64: Convert.ToBase64String(bytes)),
+                _ => new SavedValue(keyPath, view, name, kind),
+            };
+            File.WriteAllText(toFile, System.Text.Json.JsonSerializer.Serialize(saved));
+            k.DeleteValue(name, throwOnMissingValue: false);
+            return RegistryMoveOutcome.Moved;
+        }
+        catch (Exception e) when (e is SecurityException or UnauthorizedAccessException) { return RegistryMoveOutcome.Denied; }
+        catch (Exception e) { OnError?.Invoke(e); return RegistryMoveOutcome.ExportFailed; }
+    }
+
+    public static RegistryRestoreOutcome RestoreValue(string file)
+    {
+        try
+        {
+            var v = System.Text.Json.JsonSerializer.Deserialize<SavedValue>(File.ReadAllText(file))!;
+            using var b = OpenBase(v.Key, v.View, out var sub);
+            using var k = b.CreateSubKey(sub, writable: true);
+            if (k.GetValueNames().Contains(v.Name, StringComparer.OrdinalIgnoreCase)) return RegistryRestoreOutcome.AlreadyExists;
+            object data = v.Kind switch
+            {
+                RegistryValueKind.MultiString => v.Lines ?? [],
+                RegistryValueKind.DWord => (int)v.Number,
+                RegistryValueKind.QWord => v.Number,
+                RegistryValueKind.Binary => Convert.FromBase64String(v.Base64 ?? ""),
+                _ => v.Text ?? "",
+            };
+            k.SetValue(v.Name, data, v.Kind);
+            return RegistryRestoreOutcome.Restored;
+        }
+        catch (Exception e) { OnError?.Invoke(e); return RegistryRestoreOutcome.Failed; }
+    }
+
     /// <summary>Только экспорт ключа в .reg (для служб: сам ключ потом удаляет sc delete).</summary>
     public static bool Export(string keyPath, RegistryView view, string toFile)
     {

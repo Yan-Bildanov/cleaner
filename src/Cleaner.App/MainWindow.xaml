@@ -39,6 +39,11 @@
                         <ui:SymbolIcon Symbol="Apps24" />
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Расширения" TargetPageType="{x:Type pages:ExtensionsPage}">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="PuzzlePiece24" />
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Система" TargetPageType="{x:Type pages:SystemPage}">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="Laptop24" />

@@ -16,6 +16,7 @@ public sealed class LeftoverItemViewModel(Leftover leftover) : Observable
     {
         LeftoverKind.Service => "Служба Windows: " + Leftover.Path,
         LeftoverKind.ScheduledTask => "Задача Планировщика: " + Leftover.Path,
+        LeftoverKind.RegistryValue => $"Автозагрузка: «{Leftover.ValueName}» в {Leftover.Path}",
         _ => Leftover.Path,
     };
 
@@ -25,6 +26,8 @@ public sealed class LeftoverItemViewModel(Leftover leftover) : Observable
         LeftoverKind.Shortcut => SymbolRegular.Link24,
         LeftoverKind.Service => SymbolRegular.Settings24,
         LeftoverKind.ScheduledTask => SymbolRegular.CalendarClock24,
+        LeftoverKind.File => SymbolRegular.Document24,
+        LeftoverKind.RegistryValue => SymbolRegular.Rocket24,
         _ => SymbolRegular.Key24,
     };
 
@@ -36,11 +39,14 @@ public sealed class LeftoverItemViewModel(Leftover leftover) : Observable
             {
                 Leftover.Kind switch
                 {
+                    LeftoverKind.Folder when Leftover.FileCount < 0 => "папка",
                     LeftoverKind.Folder when Leftover.FileCount == 0 => "пустая папка",
                     LeftoverKind.Folder => $"папка · файлов: {Leftover.FileCount:N0} · {Format.Bytes(Leftover.Size)}",
                     LeftoverKind.Shortcut => "ярлык",
                     LeftoverKind.Service => "будет остановлена и удалена (вернётся после перезагрузки, если восстановить из карантина)",
                     LeftoverKind.ScheduledTask => "задача будет удалена",
+                    LeftoverKind.File => $"файл · {Format.Bytes(Leftover.Size)}",
+                    LeftoverKind.RegistryValue => "запуск при входе в Windows",
                     _ => "ключ реестра" + (Leftover.View == Microsoft.Win32.RegistryView.Registry32 ? " (32-битный)" : ""),
                 },
                 Leftover.Reason,
