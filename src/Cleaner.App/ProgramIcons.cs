@@ -22,24 +22,74 @@ public static class ProgramIcons
         return null;
     }
 
+    /// <summary>
+    /// Порядок: значок из реестра → значок главного .exe в папке программы. Но некоторые программы (Total Commander и др.)
+    /// указывают в реестре значок своего деинсталлятора — тогда сначала главный .exe, а значок деинсталлятора — в последнюю очередь.
+    /// </summary>
     static IEnumerable<(string File, int Index)> Candidates(InstalledProgram p)
     {
+        (string File, int Index)? display = null;
         if (p.DisplayIcon is { } di)
         {
             var s = Environment.ExpandEnvironmentVariables(di.Trim());
             var index = 0;
             var comma = s.LastIndexOf(',');
             if (comma > 1 && int.TryParse(s[(comma + 1)..].Trim(), out var i)) { index = i; s = s[..comma]; }
-            yield return (s.Trim().Trim('"'), index);
+            display = (s.Trim().Trim('"'), index);
         }
-        // Нет значка в реестре — берём первый .exe в папке программы.
-        if (p.InstallLocation is { } dir && ProgramInventory.IsProgramOwnFolder(dir))
+
+        var uninstallExe = UninstallCommand.For(p)?.FileName;
+        var displayIsUninstaller = display is { } d
+            && (IsUninstallerFile(d.File) || (uninstallExe is not null && SamePath(d.File, uninstallExe)));
+
+        if (display is { } first && !displayIsUninstaller) yield return first;
+
+        // Папка программы: из реестра, а если её нет — папка, где лежит значок-деинсталлятор.
+        var dir = p.InstallLocation;
+        if ((dir is null || !Directory.Exists(dir)) && displayIsUninstaller) dir = Path.GetDirectoryName(display!.Value.File);
+        if (dir is not null && ProgramInventory.IsProgramOwnFolder(dir) && MainExe(dir, p.Name) is { } main) yield return (main, 0);
+
+        if (display is { } last && displayIsUninstaller) yield return last;      // лучше значок деинсталлятора, чем никакого
+    }
+
+    static bool IsUninstallerFile(string path)
+    {
+        var n = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+        return n.Contains("unin") || n.Contains("remove") || n.StartsWith("un_") || n.StartsWith("au_") || n is "uninst" or "uninstall";
+    }
+
+    static bool SamePath(string a, string b)
+    {
+        try { return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Главный .exe программы в её папке: сначала тот, чьё имя похоже на название программы
+    /// («TOTALCMD64.EXE» ↔ «Total Commander»), иначе самый большой — служебные помощники обычно маленькие.
+    /// </summary>
+    static string? MainExe(string dir, string programName)
+    {
+        try
         {
-            string? exe = null;
-            try { exe = Directory.EnumerateFiles(dir, "*.exe").FirstOrDefault(f => !Path.GetFileName(f).StartsWith("unins", StringComparison.OrdinalIgnoreCase)); }
-            catch { }
-            if (exe is not null) yield return (exe, 0);
+            string[] helpers = ["setup", "update", "updater", "crash", "report", "helper", "install", "launcher", "elevate", "notify"];
+            var exes = new DirectoryInfo(dir).EnumerateFiles("*.exe")
+                .Where(f => !IsUninstallerFile(f.Name))
+                .Where(f => !helpers.Any(h => f.Name.Contains(h, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (exes.Count == 0) return null;
+
+            var words = LeftoverScanner.StripVersion(programName).Split(' ', '-', '_', '(', ')')
+                .Select(LeftoverScanner.Norm).Where(w => w.Length >= 3).ToList();
+            var byName = exes.Where(f =>
+            {
+                var n = LeftoverScanner.Norm(Path.GetFileNameWithoutExtension(f.Name));
+                return words.Any(w => n.Contains(w) || w.Contains(n.Length >= 4 ? n : "\0"))
+                       || (words.Count >= 2 && n.StartsWith(words[0][..Math.Min(5, words[0].Length)]) && n.Contains(words[1][..Math.Min(3, words[1].Length)]));
+            }).OrderByDescending(f => f.Length).FirstOrDefault();
+            return (byName ?? exes.OrderByDescending(f => f.Length).First()).FullName;
         }
+        catch { return null; }
     }
 
     /// <summary>
