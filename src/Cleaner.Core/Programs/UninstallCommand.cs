@@ -16,6 +16,55 @@ public sealed partial record UninstallCommand(string FileName, string Arguments)
     }
 
     /// <summary>
+    /// Тихое удаление (без вопросов в окне деинсталлятора) — только там, где способ известен наверняка:
+    /// QuietUninstallString от самой программы, Windows Installer, Inno Setup (unins000.exe), NSIS.
+    /// null — тихого способа нет, деинсталлятор запустится как обычно.
+    /// </summary>
+    public static UninstallCommand? Quiet(InstalledProgram p)
+    {
+        if (p.MsiProductCode is { } code) return new("msiexec.exe", $"/x {code} /qb /norestart REBOOT=ReallySuppress");
+        if (p.QuietUninstallString is { } q && Parse(q) is { } quiet) return quiet;
+        if (For(p) is not { } cmd) return null;
+
+        var file = Path.GetFileName(cmd.FileName);
+        if (InnoUninstaller().IsMatch(file))
+            return cmd with { Arguments = Join(cmd.Arguments, "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART") };
+        if (IsNsis(cmd.FileName) && !cmd.Arguments.Contains("/S", StringComparison.Ordinal))
+            return cmd with { Arguments = Join(cmd.Arguments, "/S") };
+        return null;
+    }
+
+    static string Join(string a, string b) => a.Length == 0 ? b : a + " " + b;
+
+    /// <summary>Деинсталлятор NSIS узнаётся по строке «Nullsoft» в начале файла.</summary>
+    public static bool IsNsis(string exe)
+    {
+        try
+        {
+            if (!File.Exists(exe)) return false;
+            using var fs = File.OpenRead(exe);
+            var buf = new byte[Math.Min(fs.Length, 2 * 1024 * 1024)];
+            var read = fs.Read(buf, 0, buf.Length);
+            return System.Text.Encoding.ASCII.GetString(buf, 0, read).Contains("Nullsoft", StringComparison.Ordinal);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Деинсталлятор «сломан»: путь к нему указан, но файла нет. Тогда штатно программу не удалить — только принудительно.
+    /// </summary>
+    public static bool IsBroken(InstalledProgram p)
+    {
+        if (p.MsiProductCode is not null) return false;
+        if (For(p) is not { } cmd) return false;
+        if (!Path.IsPathRooted(cmd.FileName)) return false;     // msiexec, rundll32 и т. п. из PATH
+        try { return !File.Exists(cmd.FileName); } catch { return false; }
+    }
+
+    [GeneratedRegex(@"^unins\d{3}\.exe$", RegexOptions.IgnoreCase)]
+    private static partial Regex InnoUninstaller();
+
+    /// <summary>
     /// Строка из реестра → файл + аргументы. Встречается всё:
     /// <c>"C:\Program Files\X\unins000.exe" /SILENT</c>, <c>C:\Program Files\X\uninstall.exe /S</c> (без кавычек, с пробелами),
     /// <c>MsiExec.exe /I{GUID}</c>, <c>rundll32.exe dfshim.dll,ShArpMaintain ...</c>.

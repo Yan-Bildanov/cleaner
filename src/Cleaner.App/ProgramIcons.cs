@@ -13,6 +13,7 @@ public static class ProgramIcons
 {
     public static ImageSource? Load(InstalledProgram p)
     {
+        if (p.IsStoreApp) return LoadStoreLogo(p.LogoPath);
         foreach (var (file, index) in Candidates(p))
         {
             var img = Extract(file, index);
@@ -39,6 +40,38 @@ public static class ProgramIcons
             catch { }
             if (exe is not null) yield return (exe, 0);
         }
+    }
+
+    /// <summary>
+    /// Логотип приложения Store. В манифесте указан «Assets\StoreLogo.png», а на диске лежат варианты
+    /// «StoreLogo.scale-100.png», «…scale-200.png» и т. п. — берём подходящий по размеру.
+    /// </summary>
+    static ImageSource? LoadStoreLogo(string? logo)
+    {
+        if (string.IsNullOrEmpty(logo)) return null;
+        try
+        {
+            var file = logo;
+            if (!File.Exists(file))
+            {
+                var dir = Path.GetDirectoryName(logo);
+                var stem = Path.GetFileNameWithoutExtension(logo);
+                if (dir is null || !Directory.Exists(dir)) return null;
+                file = Directory.EnumerateFiles(dir, stem + ".*" + Path.GetExtension(logo))
+                    .OrderBy(f => f.Contains("scale-100") ? 0 : f.Contains("scale-200") ? 1 : f.Contains("targetsize-48") ? 2 : 3)
+                    .FirstOrDefault(f => !f.Contains("contrast-", StringComparison.OrdinalIgnoreCase));
+                if (file is null) return null;
+            }
+            var img = new BitmapImage();
+            img.BeginInit();
+            img.CacheOption = BitmapCacheOption.OnLoad;
+            img.DecodePixelWidth = 64;
+            img.UriSource = new Uri(file);
+            img.EndInit();
+            img.Freeze();
+            return img;
+        }
+        catch { return null; }
     }
 
     static ImageSource? Extract(string file, int index)

@@ -12,12 +12,19 @@ public sealed class LeftoverItemViewModel(Leftover leftover) : Observable
     public bool IsChecked { get => _isChecked; set { Set(ref _isChecked, value); CheckedChanged?.Invoke(); } }
     public event Action? CheckedChanged;
 
-    public string Path => Leftover.Path;
+    public string Path => Leftover.Kind switch
+    {
+        LeftoverKind.Service => "Служба Windows: " + Leftover.Path,
+        LeftoverKind.ScheduledTask => "Задача Планировщика: " + Leftover.Path,
+        _ => Leftover.Path,
+    };
 
     public SymbolRegular Icon => Leftover.Kind switch
     {
         LeftoverKind.Folder => SymbolRegular.Folder24,
         LeftoverKind.Shortcut => SymbolRegular.Link24,
+        LeftoverKind.Service => SymbolRegular.Settings24,
+        LeftoverKind.ScheduledTask => SymbolRegular.CalendarClock24,
         _ => SymbolRegular.Key24,
     };
 
@@ -32,6 +39,8 @@ public sealed class LeftoverItemViewModel(Leftover leftover) : Observable
                     LeftoverKind.Folder when Leftover.FileCount == 0 => "пустая папка",
                     LeftoverKind.Folder => $"папка · файлов: {Leftover.FileCount:N0} · {Format.Bytes(Leftover.Size)}",
                     LeftoverKind.Shortcut => "ярлык",
+                    LeftoverKind.Service => "будет остановлена и удалена (вернётся после перезагрузки, если восстановить из карантина)",
+                    LeftoverKind.ScheduledTask => "задача будет удалена",
                     _ => "ключ реестра" + (Leftover.View == Microsoft.Win32.RegistryView.Registry32 ? " (32-битный)" : ""),
                 },
                 Leftover.Reason,

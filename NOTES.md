@@ -52,8 +52,26 @@
       `Cleaner.exe --remove-leftovers plan.json` (`LeftoverPlan`); помощник перепроверяет план и пишет `plan.json.result`.
   - Решение по реестру (октябрь 2026): общей «чистки реестра» по-прежнему нет; удаляются только ключи удалённой программы
     по точному имени и только через карантин с .reg-копией.
+    - Этап 3 (октябрь 2026):
+      - TFM — `net10.0-windows10.0.19041.0` во всех проектах (нужен WinRT `PackageManager` для Store).
+      - `StoreApps` — приложения Store текущего пользователя (`ProgramScope.Store`). Скрыты: frameworks, resource,
+        подпись System и пакеты без записи в «Пуске» (`GetAppListEntries().Count == 0`). Защищены (`NoRemove` +
+        `NoRemoveReason`): Microsoft Store, DesktopAppInstaller (winget), StorePurchaseApp, XboxIdentityProvider, Claude.
+        Удаление — `RemovePackageAsync`; хвосты для Store не ищем (данные в Packages убирает Windows).
+      - Тихий режим `UninstallCommand.Quiet`: MSI `/x /qb /norestart`, QuietUninstallString, Inno (`uninsNNN.exe` →
+        `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), NSIS (строка «Nullsoft» в exe → `/S`). Иначе — обычный запуск.
+      - Пакетное удаление — по очереди, затем общий поиск хвостов (слияние по Kind+Path+View).
+      - `UninstallCommand.IsBroken` — путь к деинсталлятору есть, файла нет → кнопка «Принудительно».
+      - `ForcedUninstall` — деинсталлятор не запускается: план = хвосты + запись в Uninstall (единственное разрешённое
+        место под `Software\Microsoft`, см. `LeftoverPlan.IsUninstallEntry`); перед файлами закрываются процессы из папок.
+      - Хвосты теперь включают службы (`SystemServices`) и задачи Планировщика (`ScheduledTasks`, COM Schedule.Service),
+        запускающие файлы из уверенных папок программы. Карантин: служба — `.reg` ключа + `sc delete` (возврат —
+        импорт, работает после перезагрузки), задача — XML + удаление (возврат — `schtasks /create /xml`).
+      - Защита: `SystemServices.IsSystemLocation` — файл в папке Windows или в любой папке `Microsoft`/`Windows…`
+        (Защитник живёт в ProgramData\Microsoft\Windows Defender!) — такие службы, задачи и процессы не трогаются никогда;
+        службы со Start ≤ 1 и драйверы — тоже. Задачи из `\Microsoft\` — никогда.
   - Этапы вкладки «Программы»: 1) список + штатное удаление — готово; 2) поиск и зачистка хвостов через карантин — готово;
-    3) пакетное и принудительное удаление, приложения Microsoft Store; 4) монитор установок (снимки до/после);
+    3) пакетное и принудительное удаление, приложения Microsoft Store — готово; 4) монитор установок (снимки до/после);
     5) расширения браузеров.
 - `tests/Cleaner.Core.Tests` — xUnit, всё удаление — только в песочнице во временной папке.
 

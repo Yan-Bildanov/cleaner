@@ -78,6 +78,38 @@ public sealed class BatchWriter : IDisposable
         return outcome;
     }
 
+    /// <summary>Служба: копия ключа → .reg, затем остановка и sc delete.</summary>
+    public bool MoveService(string serviceName, string ruleId)
+    {
+        var stored = (++_counter).ToString("D6") + ".reg";
+        var file = Path.Combine(Dir, QuarantineStore.FilesDir, stored);
+        if (!Programs.SystemServices.StopAndDelete(serviceName, file))
+        {
+            try { File.Delete(file); } catch { }
+            return false;
+        }
+        Record(serviceName, stored, file, ruleId, QuarantineEntry.KindService);
+        return true;
+    }
+
+    /// <summary>Задача Планировщика: XML → файл, затем удаление задачи.</summary>
+    public bool MoveScheduledTask(string taskPath, string ruleId)
+    {
+        var stored = (++_counter).ToString("D6") + ".xml";
+        var file = Path.Combine(Dir, QuarantineStore.FilesDir, stored);
+        if (!Programs.ScheduledTasks.ExportAndDelete(taskPath, file)) return false;
+        Record(taskPath, stored, file, ruleId, QuarantineEntry.KindTask);
+        return true;
+    }
+
+    void Record(string original, string stored, string file, string ruleId, string kind)
+    {
+        long size = 0;
+        try { size = new FileInfo(file).Length; } catch { }
+        _manifest.WriteLine(JsonSerializer.Serialize(new QuarantineEntry(original, stored, size, ruleId, kind)));
+        MovedCount++;
+    }
+
     public void Dispose()
     {
         _manifest.Dispose();

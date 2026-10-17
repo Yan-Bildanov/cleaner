@@ -28,12 +28,18 @@ public static class Uninstaller
     /// <summary>Как долго ждём, если не видно ни деинсталлятора, ни изменений: после этого считаем, что окно закрыли.</summary>
     static readonly TimeSpan QuietPeriod = TimeSpan.FromSeconds(4);
 
+    /// <param name="quiet">Удалить без вопросов, если для этого деинсталлятора известен тихий режим (<see cref="UninstallCommand.Quiet"/>).</param>
     public static async Task<UninstallResult> RunAsync(InstalledProgram program, IProgress<string>? progress = null,
-                                                       CancellationToken stopWaiting = default)
+                                                       CancellationToken stopWaiting = default, bool quiet = false)
     {
-        var cmd = UninstallCommand.For(program);
+        if (program.Scope == ProgramScope.Store) return await StoreApps.RemoveAsync(program, progress);
+
+        var quietCmd = quiet ? UninstallCommand.Quiet(program) : null;
+        var cmd = quietCmd ?? UninstallCommand.For(program);
         if (cmd is null || !program.CanUninstall)
             return new(UninstallOutcome.Failed, "У программы нет деинсталлятора (или установщик запретил удаление).");
+        if (UninstallCommand.IsBroken(program))
+            return new(UninstallOutcome.Failed, "Деинсталлятор программы не найден на диске — её можно удалить только принудительно.");
 
         var before = Snapshot();
         var started = DateTime.Now;
@@ -60,7 +66,9 @@ public static class Uninstaller
             return new(UninstallOutcome.Failed, "Не удалось запустить деинсталлятор: " + ex.Message);
         }
 
-        progress?.Report("Открылся деинсталлятор программы — пройди его шаги в его окне.");
+        progress?.Report(quietCmd is not null
+            ? "Удаляю в тихом режиме — вопросов не будет, может мелькнуть окно с прогрессом."
+            : "Открылся деинсталлятор программы — пройди его шаги в его окне.");
 
         int? exitCode = null;
         if (proc is not null)

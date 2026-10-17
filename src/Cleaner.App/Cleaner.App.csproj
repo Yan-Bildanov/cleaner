@@ -12,7 +12,9 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>Cleaner</AssemblyName>
     <RootNamespace>Cleaner.App</RootNamespace>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Windows 10 2004+: нужны API пакетов Microsoft Store (Windows.Management.Deployment). -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>

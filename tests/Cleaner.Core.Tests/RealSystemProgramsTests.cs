@@ -24,6 +24,19 @@ public class RealSystemProgramsTests(ITestOutputHelper output)
         Assert.NotEmpty(programs);
     }
 
+    [Fact, Trait("Category", "RealSystem")]
+    public void List_store_apps_and_broken_programs_read_only()
+    {
+        foreach (var a in StoreApps.ReadAll())
+            output.WriteLine($"STORE {a.Name,-45} | {a.Publisher,-25} | {a.Version,-14} | {a.InstallDate:yyyy-MM-dd} | {a.PackageFamilyName}");
+        foreach (var p in ProgramInventory.ReadAll())
+        {
+            if (UninstallCommand.IsBroken(p)) output.WriteLine($"BROKEN {p.Name} | {p.UninstallString}");
+            var q = UninstallCommand.Quiet(p);
+            output.WriteLine($"QUIET  {p.Name,-50} | {(q is null ? "—" : q.FileName + " " + q.Arguments)}");
+        }
+    }
+
     /// <summary>
     /// «Что нашлось бы, если удалить программу X» — для каждой установленной программы. ТОЛЬКО ЧТЕНИЕ.
     /// Пока программа установлена, её папки — не хвосты; смысл прогона — увидеть ложные срабатывания на чужое.

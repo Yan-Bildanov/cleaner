@@ -13,6 +13,10 @@ public sealed record QuarantineEntry(string Original, string Stored, long Size, 
     public const string KindReg64 = "reg64";
     public const string KindReg32 = "reg32";
     public const string KindRegUser = "reg";
+    /// <summary>Служба Windows: Original — имя службы, Stored — .reg с её ключом.</summary>
+    public const string KindService = "svc";
+    /// <summary>Задача Планировщика: Original — путь задачи, Stored — её XML.</summary>
+    public const string KindTask = "task";
 
     public bool IsRegistry => Kind is KindReg64 or KindReg32 or KindRegUser;
     public bool IsDir => Kind == KindDir;
@@ -108,6 +112,24 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
             {
                 try { Directory.CreateDirectory(e.Original); restored++; }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { failed++; remaining.Add(e); }
+                continue;
+            }
+            if (e.Kind == QuarantineEntry.KindService)
+            {
+                // Ключ службы возвращается импортом; сама служба заработает после перезагрузки.
+                switch (RegistryBackup.Restore(Programs.SystemServices.KeyPath(e.Original), QuarantineEntry.KindReg64, stored))
+                {
+                    case RegistryRestoreOutcome.Restored: restored++; break;
+                    case RegistryRestoreOutcome.AlreadyExists: existing++; remaining.Add(e); break;
+                    default: failed++; remaining.Add(e); break;
+                }
+                continue;
+            }
+            if (e.Kind == QuarantineEntry.KindTask)
+            {
+                if (Programs.ScheduledTasks.Exists(e.Original)) { existing++; remaining.Add(e); }
+                else if (Programs.ScheduledTasks.Restore(e.Original, stored)) restored++;
+                else { failed++; remaining.Add(e); }
                 continue;
             }
             if (e.IsRegistry)

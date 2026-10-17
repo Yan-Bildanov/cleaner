@@ -89,6 +89,13 @@ public static class RegistryBackup
         }
     }
 
+    /// <summary>Только экспорт ключа в .reg (для служб: сам ключ потом удаляет sc delete).</summary>
+    public static bool Export(string keyPath, RegistryView view, string toFile)
+    {
+        var viewArg = IsUser(keyPath) || view != RegistryView.Registry32 ? "/reg:64" : "/reg:32";
+        return RunReg($"export \"{keyPath}\" \"{toFile}\" /y {viewArg}") && File.Exists(toFile) && new FileInfo(toFile).Length > 0;
+    }
+
     public static RegistryRestoreOutcome Restore(string keyPath, string kind, string file)
     {
         try

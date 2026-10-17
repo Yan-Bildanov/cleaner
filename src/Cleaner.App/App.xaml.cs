@@ -55,6 +55,10 @@ public partial class App : Application
         Core.Programs.Uninstaller.OnError = Log;
         Core.Programs.LeftoverScanner.OnError = Log;
         Core.Cleaning.RegistryBackup.OnError = Log;
+        Core.Programs.StoreApps.OnError = Log;
+        Core.Programs.SystemServices.OnError = Log;
+        Core.Programs.ScheduledTasks.OnError = Log;
+        Core.Programs.ProgramProcesses.OnError = Log;
         WatchCloseSignal();
         DispatcherUnhandledException += OnUiException;
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Log(a.ExceptionObject as Exception);

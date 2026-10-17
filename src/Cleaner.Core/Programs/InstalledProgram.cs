@@ -9,6 +9,8 @@ public enum ProgramScope
     Machine32,
     /// <summary>HKCU — программы, установленные только для текущего пользователя.</summary>
     User,
+    /// <summary>Приложение Microsoft Store (пакет MSIX/AppX) текущего пользователя.</summary>
+    Store,
 }
 
 /// <summary>Установленная программа — как её видит «Установка и удаление программ».</summary>
@@ -31,17 +33,30 @@ public sealed record InstalledProgram
     /// <summary>Код продукта Windows Installer ({GUID}) — для удаления через msiexec /x.</summary>
     public string? MsiProductCode { get; init; }
 
-    /// <summary>Установщик запретил удаление (NoRemove = 1).</summary>
+    /// <summary>Установщик запретил удаление (NoRemove = 1) или Cleaner защищает программу сам.</summary>
     public bool NoRemove { get; init; }
+    /// <summary>Почему удалить нельзя — для подсказки. null — «установщик запретил».</summary>
+    public string? NoRemoveReason { get; init; }
 
     public required ProgramScope Scope { get; init; }
     /// <summary>Имя подключа в ...\Uninstall — по нему проверяем, удалилась ли программа.</summary>
     public required string RegistryKeyName { get; init; }
 
-    public bool CanUninstall => !NoRemove && (MsiProductCode is not null || !string.IsNullOrWhiteSpace(UninstallString));
+    /// <summary>Только для приложений Store: полное имя пакета (для удаления) и семейство (папка данных в Packages).</summary>
+    public string? PackageFullName { get; init; }
+    public string? PackageFamilyName { get; init; }
+    /// <summary>Только для Store: путь к картинке-логотипу.</summary>
+    public string? LogoPath { get; init; }
+
+    public bool IsStoreApp => Scope == ProgramScope.Store;
+
+    public bool CanUninstall => !NoRemove && (IsStoreApp
+        ? PackageFullName is not null
+        : MsiProductCode is not null || !string.IsNullOrWhiteSpace(UninstallString));
 
     public string RegistryPath => Scope switch
     {
+        ProgramScope.Store => "",
         ProgramScope.Machine64 => @"HKLM\" + ProgramInventory.UninstallKey + @"\" + RegistryKeyName,
         ProgramScope.Machine32 => @"HKLM\" + ProgramInventory.UninstallKey32 + @"\" + RegistryKeyName,
         _ => @"HKCU\" + ProgramInventory.UninstallKey + @"\" + RegistryKeyName,

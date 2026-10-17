@@ -4,7 +4,7 @@ using Microsoft.Win32;
 
 namespace Cleaner.Core.Programs;
 
-public enum LeftoverKind { Folder, Shortcut, RegistryKey }
+public enum LeftoverKind { Folder, Shortcut, RegistryKey, Service, ScheduledTask }
 
 /// <summary>
 /// High — имя папки/ключа точно совпадает с названием программы или это её папка установки (отмечено по умолчанию).
@@ -37,8 +37,20 @@ public sealed partial class LeftoverScanner(
     IReadOnlyList<string> folderRoots,
     IReadOnlyList<LeftoverScanner.RegistryRoot> registryRoots,
     IReadOnlyList<string> shortcutDirs,
-    IReadOnlyList<string>? protectedFolders = null)
+    IReadOnlyList<string>? protectedFolders = null,
+    Func<IReadOnlyCollection<string>, IEnumerable<Leftover>>? findRunnersInside = null)
 {
+    /// <summary>Службы и задачи Планировщика, которые запускают файлы из указанных папок программы.</summary>
+    public static IEnumerable<Leftover> SystemRunnersInside(IReadOnlyCollection<string> folders)
+    {
+        foreach (var s in SystemServices.FindInside(folders))
+            yield return new Leftover(LeftoverKind.Service, s.Name, LeftoverConfidence.High,
+                $"служба «{s.DisplayName}» запускает {Path.GetFileName(s.Executable)} из папки программы", NeedsAdmin: true);
+        foreach (var t in ScheduledTasks.FindInside(folders))
+            yield return new Leftover(LeftoverKind.ScheduledTask, t.Path, LeftoverConfidence.High,
+                $"задача Планировщика запускает {Path.GetFileName(t.Executable)} из папки программы", NeedsAdmin: true);
+    }
+
     public sealed record RegistryRoot(RegistryHive Hive, RegistryView View, string Path);
 
     public static Action<Exception>? OnError;
@@ -78,7 +90,7 @@ public sealed partial class LeftoverScanner(
         return new LeftoverScanner(
             folders.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             reg, shortcuts.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            [AppPaths.DataDir]);
+            [AppPaths.DataDir], SystemRunnersInside);
     }
 
     // ── Имена ─────────────────────────────────────────────────────────────────────────────────────
@@ -311,6 +323,23 @@ public sealed partial class LeftoverScanner(
             found.Add(new Leftover(LeftoverKind.RegistryKey, path, conf, reason, View: view, NeedsAdmin: admin));
         }
 
+        // 5. Службы и задачи Планировщика, запускающие файлы из папки программы (только уверенные папки).
+        if (findRunnersInside is not null)
+        {
+            var programFolders = found.Where(f => f.Kind == LeftoverKind.Folder && f.Confidence == LeftoverConfidence.High)
+                                      .Select(f => f.Path).ToList();
+            if (removed.InstallLocation is { } il && Full(il) is { } ilFull && !IsSharedRoot(ilFull)
+                && ilFull.Length > 3 && !IsWindowsPath(ilFull) && !otherLocations.Any(o => IsInside(ilFull, o) || IsInside(o, ilFull) || o.Equals(ilFull, StringComparison.OrdinalIgnoreCase)))
+                programFolders.Add(ilFull);
+            programFolders = programFolders.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            try
+            {
+                foreach (var r in findRunnersInside(programFolders))
+                    if (seen.Add(r.Kind + "|" + r.Path)) found.Add(r);
+            }
+            catch (Exception ex) { OnError?.Invoke(ex); }
+        }
+
         // Вложенное в уже найденную папку — не дублируем.
         var folders = found.Where(f => f.Kind == LeftoverKind.Folder).Select(f => f.Path).ToList();
         found.RemoveAll(f => f.Kind == LeftoverKind.Folder && folders.Any(o => !o.Equals(f.Path, StringComparison.OrdinalIgnoreCase) && IsInside(f.Path, o)));
@@ -327,6 +356,12 @@ public sealed partial class LeftoverScanner(
         foreach (var o in otherLocations)
             if (o.Equals(full, StringComparison.OrdinalIgnoreCase) || IsInside(o, full) || IsInside(full, o)) return false;
         return true;
+    }
+
+    static bool IsWindowsPath(string path)
+    {
+        var win = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd('\\');
+        return path.Equals(win, StringComparison.OrdinalIgnoreCase) || IsInside(path, win);
     }
 
     static bool IsUserWritableLocation(string path)

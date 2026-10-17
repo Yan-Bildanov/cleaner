@@ -12,26 +12,58 @@ public sealed record LeftoverRemoveReport(
 /// </summary>
 public static class LeftoverRemover
 {
-    public static LeftoverRemoveReport Remove(QuarantineStore store, IEnumerable<Leftover> items, bool isElevated, string label)
+    /// <summary>Порядок: сначала то, что запускает программу (задачи, службы), потом её процессы, потом файлы и реестр.</summary>
+    static int Order(LeftoverKind k) => k switch
+    {
+        LeftoverKind.ScheduledTask => 0,
+        LeftoverKind.Service => 1,
+        LeftoverKind.Shortcut => 2,
+        LeftoverKind.Folder => 3,
+        _ => 4,
+    };
+
+    /// <param name="killProcesses">Принудительное удаление: закрыть процессы, запущенные из удаляемых папок.</param>
+    public static LeftoverRemoveReport Remove(QuarantineStore store, IEnumerable<Leftover> items, bool isElevated, string label,
+                                              bool killProcesses = false)
     {
         int removed = 0, locked = 0, denied = 0;
         long bytes = 0;
         var needAdmin = new List<Leftover>();
         string? batchId = null;
         var ruleId = "Хвосты: " + label;
+        var killed = false;
+
+        var ordered = items.OrderBy(i => Order(i.Kind)).ToList();
+        var folders = ordered.Where(i => i.Kind == LeftoverKind.Folder && (!i.NeedsAdmin || isElevated)).Select(i => i.Path).ToList();
 
         using (var batch = store.Begin())
         {
-            foreach (var item in items)
+            foreach (var item in ordered)
             {
                 if (item.NeedsAdmin && !isElevated) { needAdmin.Add(item); continue; }
 
                 // Последняя проверка перед действием: никаких системных веток и общих папок, что бы ни пришло на вход.
                 if (item.Kind == LeftoverKind.RegistryKey && !LeftoverPlan.IsSoftwareSubkey(item.Path)) { denied++; continue; }
                 if (item.Kind == LeftoverKind.Folder && Directory.Exists(item.Path) && !ProgramInventory.IsProgramOwnFolder(item.Path)) { denied++; continue; }
+                if (item.Kind == LeftoverKind.Service && !SystemServices.IsSafeToRemove(item.Path)) { denied++; continue; }
+                if (item.Kind == LeftoverKind.ScheduledTask && item.Path.StartsWith(@"\Microsoft\", StringComparison.OrdinalIgnoreCase)) { denied++; continue; }
+
+                if (killProcesses && !killed && Order(item.Kind) >= 2)
+                {
+                    ProgramProcesses.KillInside(folders);
+                    killed = true;
+                }
 
                 switch (item.Kind)
                 {
+                    case LeftoverKind.ScheduledTask:
+                        if (batch.MoveScheduledTask(item.Path, ruleId)) removed++; else denied++;
+                        break;
+
+                    case LeftoverKind.Service:
+                        if (batch.MoveService(item.Path, ruleId)) removed++; else denied++;
+                        break;
+
                     case LeftoverKind.Shortcut:
                         switch (batch.Move(item.Path, item.Size, ruleId))
                         {

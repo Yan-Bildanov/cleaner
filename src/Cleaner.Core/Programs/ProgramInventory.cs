@@ -32,6 +32,7 @@ public static partial class ProgramInventory
     /// <summary>Есть ли ещё запись о программе в реестре — так проверяем, что удаление прошло.</summary>
     public static bool Exists(InstalledProgram p)
     {
+        if (p.IsStoreApp) return StoreApps.Exists(p);
         try
         {
             using var root = OpenRoot(p.Scope);
