@@ -18,7 +18,7 @@ public class BrowserExtensionTests
         var ud = Path.Combine(box.Root, "User Data");
         var prof = Path.Combine(ud, "Profile 1");
         Directory.CreateDirectory(prof);
-        File.WriteAllText(Path.Combine(ud, "Local State"), """{"profile":{"info_cache":{"Profile 1":{"name":"Yan"}}}}""");
+        File.WriteAllText(Path.Combine(ud, "Local State"), """{"profile":{"info_cache":{"Profile 1":{"name":"Работа"}}}}""");
 
         void Ext(string id, string manifest, string? locale = null)
         {
@@ -74,7 +74,7 @@ public class BrowserExtensionTests
 
         var good = exts.Single(e => e.Id == Good);
         Assert.Equal("Тёмная тема", good.Name);                          // __MSG_…__ из _locales\ru
-        Assert.Equal("Yan", good.ProfileName);                           // имя из Local State
+        Assert.Equal("Работа", good.ProfileName);                           // имя из Local State
         Assert.Equal("Profile 1", good.ProfileDir);
         Assert.Equal(ExtensionSource.WebStore, good.Source);
         Assert.True(good.Enabled);

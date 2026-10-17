@@ -53,6 +53,28 @@ public sealed class QuarantineStore(string root, ISystemInfo system)
 
     public string Root { get; } = root;
 
+    /// <summary>
+    /// Файлы, перенесённые в карантин с правами администратора (из Program Files и т. п.), сохраняют права доступа
+    /// системной папки — без администратора их потом не удалить ни кнопкой, ни автоочисткой через 7 дней.
+    /// Сбрасываем права на всём карантине до унаследованных от папки профиля. Вызывается из повышенного помощника.
+    /// </summary>
+    public void ResetPermissions()
+    {
+        if (!Directory.Exists(Root)) return;
+        try
+        {
+            using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                Path.Combine(Environment.SystemDirectory, "icacls.exe"), $"\"{Root}\" /reset /T /C /Q")
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            })!;
+            p.StandardOutput.ReadToEnd();
+            p.StandardError.ReadToEnd();
+            p.WaitForExit(60_000);
+        }
+        catch (Exception ex) { OnError?.Invoke(ex); }
+    }
+
     /// <summary>Куда сообщать о пропущенных партиях (приложение пишет это в журнал ошибок).</summary>
     public static Action<Exception>? OnError { get; set; }
 

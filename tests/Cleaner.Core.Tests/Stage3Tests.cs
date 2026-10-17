@@ -88,7 +88,7 @@ public class Stage3Tests
     [InlineData(@"C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeClickToRun.exe", true)]
     [InlineData(@"C:\Windows\System32\svchost.exe", true)]
     [InlineData(@"C:\Program Files (x86)\AnyDesk\AnyDesk.exe", false)]
-    [InlineData(@"C:\Users\user\AppData\Local\Programs\Microsoft VS Code\Code.exe", false)]
+    [InlineData(@"C:\Users\demo\AppData\Local\Programs\Microsoft VS Code\Code.exe", false)]
     public void Microsoft_and_windows_locations_are_system(string exe, bool system) =>
         Assert.Equal(system, SystemServices.IsSystemLocation(exe));
 

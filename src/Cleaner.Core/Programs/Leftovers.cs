@@ -150,7 +150,7 @@ public sealed partial class LeftoverScanner(
         AddName(p.Name);
         var stripped = StripVersion(p.Name);
         AddName(stripped);
-        // «Happ - Proxy Utility» → ещё и «Happ»
+        // «Acme - Proxy Utility» → ещё и «Acme»
         var dash = stripped.IndexOf(" - ", StringComparison.Ordinal);
         if (dash > 0) AddName(stripped[..dash]);
 

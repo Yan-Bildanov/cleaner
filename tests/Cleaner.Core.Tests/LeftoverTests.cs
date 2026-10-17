@@ -17,7 +17,7 @@ public class LeftoverTests
     [InlineData("VLC media player 3.0.23 (64-bit)", "VLC media player")]
     [InlineData("WinRAR 5.91 (64-разрядная)", "WinRAR")]
     [InlineData("Lightshot-5.5.0.7", "Lightshot")]
-    [InlineData("Happ - Proxy Utility 2.17.1(566)", "Happ - Proxy Utility")]
+    [InlineData("Acme - Proxy Utility 2.17.1(566)", "Acme - Proxy Utility")]
     [InlineData("Telegram Desktop", "Telegram Desktop")]
     public void Strips_versions_from_names(string name, string expected) => Assert.Equal(expected, LeftoverScanner.StripVersion(name));
 

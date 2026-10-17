@@ -31,6 +31,8 @@ public sealed record LeftoverPlan(string Label, List<Leftover> Items, bool KillP
         // теми же правилами, что и при поиске: только «свои» папки программ, только ключи Software\<имя>.
         var safe = plan.Items.Where(IsStillSafe).ToList();
         var report = LeftoverRemover.Remove(store, safe, isElevated: true, plan.Label, plan.KillProcesses);
+        // Чтобы перенесённое с правами администратора потом удалялось из карантина и без них.
+        store.ResetPermissions();
         File.WriteAllText(ResultPath(planFile), JsonSerializer.Serialize(report));
     }
 
